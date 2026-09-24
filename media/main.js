@@ -36,7 +36,10 @@
   const histogramScope = document.getElementById('histogramScope');
   const histogramContext = histogramCanvas.getContext('2d');
   const pixelGrid = document.getElementById('pixelGrid');
+  const pixelLabels = document.getElementById('pixelLabels');
+  const pixelLabelsContext = pixelLabels.getContext('2d');
   const pixelMarker = document.getElementById('pixelMarker');
+  const pixelOverlayLegend = document.getElementById('pixelOverlayLegend');
   const pixelStatus = document.getElementById('pixelStatus');
   const pixelSwatch = document.getElementById('pixelSwatch');
   const pixelCoordinates = document.getElementById('pixelCoordinates');
@@ -94,8 +97,11 @@
   let histogramTexture;
   let histogramFramebuffer;
   let histogramFrameRequest;
+  let sampleBufferWidth = HISTOGRAM_SAMPLE_SIZE;
+  let sampleBufferHeight = HISTOGRAM_SAMPLE_SIZE;
   let inspectedPixel;
   let pixelFrameRequest;
+  let pixelLabelsFrameRequest;
   let uniforms;
 
   const vertexShaderSource = `
@@ -236,6 +242,7 @@
     zoomValue.textContent = `${Math.round(scale * 100)}%`;
     updateSelectionOverlay();
     updatePixelOverlays();
+    schedulePixelLabels();
   }
 
   function fitImage() {
@@ -460,6 +467,7 @@
     configureShader();
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     scheduleHistogram();
+    schedulePixelLabels();
     if (inspectedPixel) {
       schedulePixelSample(inspectedPixel, true);
     }
@@ -594,13 +602,175 @@
     histogramScope.textContent = 'Whole image';
   }
 
+  function schedulePixelLabels() {
+    if (!gl || !imageWidth || scale < PIXEL_GRID_SCALE || !pixelLabelsContext) {
+      if (pixelLabelsFrameRequest) {
+        cancelAnimationFrame(pixelLabelsFrameRequest);
+        pixelLabelsFrameRequest = undefined;
+      }
+      clearPixelLabels();
+      return;
+    }
+    if (pixelLabelsFrameRequest) {
+      cancelAnimationFrame(pixelLabelsFrameRequest);
+    }
+    pixelLabelsFrameRequest = requestAnimationFrame(() => {
+      pixelLabelsFrameRequest = undefined;
+      updatePixelLabels();
+    });
+  }
+
+  function updatePixelLabels() {
+    if (!gl || !imageWidth || scale < PIXEL_GRID_SCALE || !pixelLabelsContext) {
+      clearPixelLabels();
+      return;
+    }
+    const viewportWidth = viewport.clientWidth;
+    const viewportHeight = viewport.clientHeight;
+    const startX = Math.max(0, Math.min(imageWidth, Math.floor(-offsetX / scale)));
+    const startY = Math.max(0, Math.min(imageHeight, Math.floor(-offsetY / scale)));
+    const endX = Math.max(
+      0,
+      Math.min(imageWidth, Math.ceil((viewportWidth - offsetX) / scale)),
+    );
+    const endY = Math.max(
+      0,
+      Math.min(imageHeight, Math.ceil((viewportHeight - offsetY) / scale)),
+    );
+    const sampleWidth = endX - startX;
+    const sampleHeight = endY - startY;
+    if (sampleWidth <= 0 || sampleHeight <= 0) {
+      clearPixelLabels();
+      return;
+    }
+
+    ensureSampleBuffer(sampleWidth, sampleHeight);
+    const samples = new Uint8Array(sampleWidth * sampleHeight * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, histogramFramebuffer);
+    gl.viewport(0, 0, sampleWidth, sampleHeight);
+    configureShader(
+      [startX / imageWidth, startY / imageHeight],
+      [endX / imageWidth, endY / imageHeight],
+    );
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.readPixels(
+      0,
+      0,
+      sampleWidth,
+      sampleHeight,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      samples,
+    );
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, display.width, display.height);
+
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    const canvasWidth = Math.max(1, Math.round(viewportWidth * pixelRatio));
+    const canvasHeight = Math.max(1, Math.round(viewportHeight * pixelRatio));
+    if (pixelLabels.width !== canvasWidth || pixelLabels.height !== canvasHeight) {
+      pixelLabels.width = canvasWidth;
+      pixelLabels.height = canvasHeight;
+    }
+    pixelLabels.hidden = false;
+    pixelOverlayLegend.hidden = false;
+    pixelOverlayLegend.textContent =
+      scale >= 32 ? 'R / G / B · adjusted 0–255' : 'Y luma · adjusted 0–255';
+    pixelLabelsContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    pixelLabelsContext.clearRect(0, 0, viewportWidth, viewportHeight);
+
+    for (let row = 0; row < sampleHeight; row += 1) {
+      const sourceRow = sampleHeight - row - 1;
+      for (let column = 0; column < sampleWidth; column += 1) {
+        const index = (sourceRow * sampleWidth + column) * 4;
+        const red = samples[index];
+        const green = samples[index + 1];
+        const blue = samples[index + 2];
+        const luma = Math.round(0.2126 * red + 0.7152 * green + 0.0722 * blue);
+        const centerX = offsetX + (startX + column + 0.5) * scale;
+        const centerY = offsetY + (startY + row + 0.5) * scale;
+        drawPixelValue(centerX, centerY, red, green, blue, luma);
+      }
+    }
+  }
+
+  function ensureSampleBuffer(requiredWidth, requiredHeight) {
+    if (requiredWidth <= sampleBufferWidth && requiredHeight <= sampleBufferHeight) {
+      return;
+    }
+    const nextWidth = Math.max(sampleBufferWidth, requiredWidth);
+    const nextHeight = Math.max(sampleBufferHeight, requiredHeight);
+    const maximumTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    if (nextWidth > maximumTextureSize || nextHeight > maximumTextureSize) {
+      throw new Error('The visible pixel grid exceeds this GPU\'s sample-buffer limit.');
+    }
+    gl.bindTexture(gl.TEXTURE_2D, histogramTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      nextWidth,
+      nextHeight,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      null,
+    );
+    sampleBufferWidth = nextWidth;
+    sampleBufferHeight = nextHeight;
+  }
+
+  function drawPixelValue(centerX, centerY, red, green, blue, luma) {
+    const darkText = luma >= 150;
+    pixelLabelsContext.textAlign = 'center';
+    pixelLabelsContext.textBaseline = 'middle';
+    pixelLabelsContext.fillStyle = darkText ? '#101010' : '#ffffff';
+    pixelLabelsContext.strokeStyle = darkText
+      ? 'rgba(255, 255, 255, 0.72)'
+      : 'rgba(0, 0, 0, 0.82)';
+
+    if (scale >= 32) {
+      const fontSize = Math.max(8, Math.min(12, Math.floor(scale / 5)));
+      const lineHeight = fontSize + 1;
+      pixelLabelsContext.font = `600 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+      pixelLabelsContext.lineWidth = Math.max(1.5, fontSize * 0.22);
+      const values = [`R${red}`, `G${green}`, `B${blue}`];
+      const firstLineY = centerY - lineHeight;
+      for (let line = 0; line < values.length; line += 1) {
+        const y = firstLineY + line * lineHeight;
+        pixelLabelsContext.strokeText(values[line], centerX, y);
+        pixelLabelsContext.fillText(values[line], centerX, y);
+      }
+      return;
+    }
+
+    const fontSize = Math.max(7, Math.min(10, Math.floor(scale * 0.42)));
+    pixelLabelsContext.font = `600 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+    pixelLabelsContext.lineWidth = Math.max(1.5, fontSize * 0.22);
+    const value = String(luma);
+    pixelLabelsContext.strokeText(value, centerX, centerY);
+    pixelLabelsContext.fillText(value, centerX, centerY);
+  }
+
+  function clearPixelLabels() {
+    pixelLabels.hidden = true;
+    pixelOverlayLegend.hidden = true;
+    if (pixelLabelsContext) {
+      pixelLabelsContext.clearRect(0, 0, pixelLabels.width, pixelLabels.height);
+    }
+  }
+
   function resetPixelInspector() {
     inspectedPixel = undefined;
     if (pixelFrameRequest) {
       cancelAnimationFrame(pixelFrameRequest);
       pixelFrameRequest = undefined;
     }
-    pixelStatus.textContent = 'Hover over the image to sample a pixel.';
+    if (pixelLabelsFrameRequest) {
+      cancelAnimationFrame(pixelLabelsFrameRequest);
+      pixelLabelsFrameRequest = undefined;
+    }
+    pixelStatus.textContent = 'Hover to sample. Pixel zoom overlays values on every visible cell.';
     pixelCoordinates.textContent = 'x —   y —';
     pixelHex.textContent = '#——';
     pixelRed.textContent = '—';
@@ -610,6 +780,7 @@
     pixelSwatch.style.removeProperty('background');
     pixelMarker.hidden = true;
     pixelGrid.hidden = true;
+    clearPixelLabels();
   }
 
   function imagePixelFromPointer(event) {
@@ -956,6 +1127,7 @@
     } else {
       updateSelectionOverlay();
       updatePixelOverlays();
+      schedulePixelLabels();
     }
   });
 

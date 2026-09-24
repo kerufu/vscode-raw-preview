@@ -2,7 +2,7 @@
   "name": "spectral-raw-preview",
   "displayName": "Spectral RAW Preview",
   "description": "Automatically open and inspect camera RAW and OpenEXR files directly in VS Code.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "spectralcapture",
   "license": "MIT",
   "engines": {

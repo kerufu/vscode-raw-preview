@@ -63,7 +63,9 @@ test('pixel zoom and inspection expose exact displayed pixel values', () => {
   for (const id of [
     'pixelZoom',
     'pixelGrid',
+    'pixelLabels',
     'pixelMarker',
+    'pixelOverlayLegend',
     'pixelCoordinates',
     'pixelRed',
     'pixelGreen',
@@ -78,8 +80,12 @@ test('pixel zoom and inspection expose exact displayed pixel values', () => {
   assert.match(webviewSource, /Math\.floor\(x\)/);
   assert.match(webviewSource, /gl\.readPixels\(0, 0, 1, 1/);
   assert.match(webviewSource, /Adjusted preview value/);
+  assert.match(webviewSource, /R \/ G \/ B · adjusted 0–255/);
+  assert.match(webviewSource, /Y luma · adjusted 0–255/);
+  assert.match(webviewSource, /const values = \[`R\$\{red\}`, `G\$\{green\}`, `B\$\{blue\}`\]/);
   assert.match(webviewStyles, /image-rendering: pixelated/);
   assert.match(webviewStyles, /\.pixel-grid/);
+  assert.match(webviewStyles, /\.pixel-labels/);
 });
 
 test('every scripted UI element exists in the webview markup', () => {

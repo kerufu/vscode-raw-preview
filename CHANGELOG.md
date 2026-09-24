@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- Added adjusted pixel values directly over every visible pixel at high zoom
+- Shows luma values at 1600% and per-channel RGB values from 3200% onward
+- Added contrast-aware value labels and an on-image value legend
+- Kept labels synchronized while panning, zooming, and changing adjustments
+
 ## 0.5.0
 
 - Increased maximum zoom from 800% to 6400% with predictable pixel-scale steps

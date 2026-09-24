@@ -46,7 +46,8 @@ Alternatively, set these values manually:
 
 - Double-click RAW or EXR files to open a dedicated preview editor
 - Fit, 100%, and pixel-level zoom up to 6400%, with mouse-drag panning
-- One-click 1600% Pixel view, crisp nearest-neighbor magnification, and a high-zoom pixel grid
+- One-click 1600% Pixel view, crisp nearest-neighbor magnification, and a high-zoom value grid
+- Adjusted values drawn over every visible pixel: luma at 1600%, then RGB at 3200% and above
 - Hover pixel inspector with zero-based coordinates, displayed RGB, hex, and luma values
 - Real-time exposure, gamma, offset, and tone-map controls powered by WebGL
 - None, Reinhard, ACES, and Filmic tone-map modes with one-click reset
@@ -69,7 +70,7 @@ Adjustments are applied instantly to the displayed preview and never modify the 
 
 The controls run in a WebGL shader, so zooming and full-resolution adjustments remain responsive. Their values persist while the editor is open; **Reset** restores the neutral view. The histogram measures the adjusted, display-referred preview. Choose **Select region**, drag across the image, and use **Clear selection** to return to the whole-image histogram. While the selection tool is active, Alt-drag or middle-drag pans.
 
-Use **Pixel** to jump to 1600%, or keep pressing **+** to zoom as far as 6400%. Double-clicking the image toggles between 100% and pixel zoom. From 1600% onward, a grid identifies individual pixels. Hover over any image pixel to see its zero-based `x`/`y` coordinates and adjusted 8-bit RGB, hex, and luma values in the Pixel inspector.
+Use **Pixel** to jump to 1600%, or keep pressing **+** to zoom as far as 6400%. Double-clicking the image toggles between 100% and pixel zoom. At 1600%, every visible cell shows its adjusted 8-bit luma value. At 3200% and above, each cell shows its adjusted R, G, and B values directly over the image. Labels use light or dark text automatically to remain legible. Hover over any image pixel for its zero-based `x`/`y` coordinates, hex value, and precise readout in the Pixel inspector.
 
 ## Settings
 
@@ -96,7 +97,7 @@ npm run package
 The package command creates a `.vsix` that can be installed with:
 
 ```sh
-code --install-extension spectral-raw-preview-0.5.0.vsix
+code --install-extension spectral-raw-preview-0.5.1.vsix
 ```
 
 ## Format notes

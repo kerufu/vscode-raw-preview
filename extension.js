@@ -268,10 +268,12 @@ class RawPreviewProvider {
         <img id="imageSource" alt="" draggable="false" crossorigin="anonymous" hidden>
       </div>
       <div id="pixelGrid" class="pixel-grid" aria-hidden="true" hidden></div>
+      <canvas id="pixelLabels" class="pixel-labels" aria-hidden="true" hidden></canvas>
       <div id="selectionBox" class="selection-box" hidden>
         <span id="selectionSize" class="selection-size"></span>
       </div>
       <div id="pixelMarker" class="pixel-marker" aria-hidden="true" hidden></div>
+      <div id="pixelOverlayLegend" class="pixel-overlay-legend" hidden></div>
       <div id="empty" class="empty">
         <div class="spinner" aria-hidden="true"></div>
         <h1 id="emptyTitle">Opening RAW image</h1>
@@ -400,7 +402,7 @@ class RawPreviewProvider {
         <div class="pixel-heading">
           <div>
             <h2 id="pixelInspectorTitle">Pixel inspector</h2>
-            <p id="pixelStatus">Hover over the image to sample a pixel.</p>
+            <p id="pixelStatus">Hover to sample. Pixel zoom overlays values on every visible cell.</p>
           </div>
           <span class="scope-badge">Display 8-bit</span>
         </div>
