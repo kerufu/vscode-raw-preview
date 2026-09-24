@@ -5,7 +5,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 
-async function renderRaw({ inputPath, outputPath, extensionPath, config }) {
+async function renderRaw({ inputPath, outputPath, floatOutputPath, extensionPath, config }) {
   const selected = config.get('decoder', 'auto');
   const decoderPath = config.get('decoderPath', '');
   const quality = clamp(config.get('jpegQuality', 92), 50, 100);
@@ -13,6 +13,9 @@ async function renderRaw({ inputPath, outputPath, extensionPath, config }) {
   const rawScriptPath = path.join(extensionPath, 'scripts', 'decode_raw.py');
   const exrScriptPath = path.join(extensionPath, 'scripts', 'decode_exr.py');
   const partialPath = `${outputPath}.${randomUUID()}.partial.jpg`;
+  const partialFloatPath = floatOutputPath
+    ? `${floatOutputPath}.${randomUUID()}.partial.f32`
+    : undefined;
   const pythonRawpy = buildPythonRawpyDecoder(
     config,
     rawScriptPath,
@@ -26,6 +29,7 @@ async function renderRaw({ inputPath, outputPath, extensionPath, config }) {
     inputPath,
     partialPath,
     quality,
+    partialFloatPath,
   );
 
   const definitions = {
@@ -80,6 +84,9 @@ async function renderRaw({ inputPath, outputPath, extensionPath, config }) {
   }
 
   const errors = [];
+  if (floatOutputPath) {
+    await fs.rm(floatOutputPath, { force: true }).catch(() => {});
+  }
   for (const name of names) {
     const definition = definitions[name];
     if (definition.platforms && !definition.platforms.includes(process.platform)) {
@@ -90,6 +97,9 @@ async function renderRaw({ inputPath, outputPath, extensionPath, config }) {
         ? decoderPath
         : definition.command;
     await fs.rm(partialPath, { force: true }).catch(() => {});
+    if (partialFloatPath) {
+      await fs.rm(partialFloatPath, { force: true }).catch(() => {});
+    }
     try {
       await run(command, definition.args, 180_000);
       const outputStat = await fs.stat(partialPath);
@@ -98,13 +108,25 @@ async function renderRaw({ inputPath, outputPath, extensionPath, config }) {
       }
       await fs.rm(outputPath, { force: true }).catch(() => {});
       await fs.rename(partialPath, outputPath);
-      return { decoder: definition.label };
+      let pixelDataPath;
+      if (name === 'pythonExr' && partialFloatPath && floatOutputPath) {
+        const floatStat = await fs.stat(partialFloatPath);
+        if (floatStat.size < 16) {
+          throw new Error('decoder produced empty floating-point pixel data');
+        }
+        await fs.rename(partialFloatPath, floatOutputPath);
+        pixelDataPath = floatOutputPath;
+      }
+      return { decoder: definition.label, pixelDataPath };
     } catch (error) {
       errors.push(`${definition.label}: ${shortError(error)}`);
     }
   }
 
   await fs.rm(partialPath, { force: true }).catch(() => {});
+  if (partialFloatPath) {
+    await fs.rm(partialFloatPath, { force: true }).catch(() => {});
+  }
   throw new Error(
     `${isExr ? 'No OpenEXR decoder' : 'No RAW decoder'} could render the file. ${isExr ? 'Install OpenCV and Pillow in the configured Python environment, or install ImageMagick.' : 'Install Darktable, RawTherapee, ImageMagick, or Python rawpy.'}\n\n${errors.join('\n')}`,
   );
@@ -121,7 +143,14 @@ function buildPythonRawpyDecoder(config, scriptPath, inputPath, outputPath, qual
   );
 }
 
-function buildPythonExrDecoder(config, scriptPath, inputPath, outputPath, quality) {
+function buildPythonExrDecoder(
+  config,
+  scriptPath,
+  inputPath,
+  outputPath,
+  quality,
+  floatOutputPath,
+) {
   return buildPythonScriptDecoder(
     config,
     'Python OpenEXR',
@@ -129,6 +158,7 @@ function buildPythonExrDecoder(config, scriptPath, inputPath, outputPath, qualit
     inputPath,
     outputPath,
     quality,
+    floatOutputPath ? [floatOutputPath] : [],
   );
 }
 
@@ -139,13 +169,14 @@ function buildPythonScriptDecoder(
   inputPath,
   outputPath,
   quality,
+  extraArgs = [],
 ) {
   const condaEnvironment = String(config.get('condaEnvironment', '') || '').trim();
   if (!condaEnvironment) {
     return {
       label,
       command: String(config.get('pythonPath', 'python3') || 'python3'),
-      args: [scriptPath, inputPath, outputPath, String(quality)],
+      args: [scriptPath, inputPath, outputPath, String(quality), ...extraArgs],
     };
   }
 
@@ -164,6 +195,7 @@ function buildPythonScriptDecoder(
       inputPath,
       outputPath,
       String(quality),
+      ...extraArgs,
     ],
   };
 }

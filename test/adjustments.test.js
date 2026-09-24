@@ -59,7 +59,7 @@ test('histogram supports whole-image and cursor-selected scopes', () => {
   assert.match(webviewSource, /uniform vec2 u_uvMax/);
 });
 
-test('pixel zoom and inspection expose exact displayed pixel values', () => {
+test('pixel zoom and inspection expose floating source or display values', () => {
   for (const id of [
     'pixelZoom',
     'pixelGrid',
@@ -70,6 +70,8 @@ test('pixel zoom and inspection expose exact displayed pixel values', () => {
     'pixelRed',
     'pixelGreen',
     'pixelBlue',
+    'pixelAlphaChannel',
+    'pixelAlpha',
     'pixelLuma',
   ]) {
     assert.match(extensionSource, new RegExp(`id=["']${id}["']`));
@@ -79,10 +81,15 @@ test('pixel zoom and inspection expose exact displayed pixel values', () => {
   assert.match(webviewSource, /const PIXEL_ZOOM_SCALE = 16/);
   assert.match(webviewSource, /Math\.floor\(x\)/);
   assert.match(webviewSource, /gl\.readPixels\(0, 0, 1, 1/);
-  assert.match(webviewSource, /Adjusted preview value/);
-  assert.match(webviewSource, /R \/ G \/ B · adjusted 0–255/);
-  assert.match(webviewSource, /Y luma · adjusted 0–255/);
-  assert.match(webviewSource, /const values = \[`R\$\{red\}`, `G\$\{green\}`, `B\$\{blue\}`\]/);
+  assert.match(webviewSource, /Original linear EXR/);
+  assert.match(webviewSource, /\$\{hasAlpha \? 'RGBA' : 'RGB'\} · \$\{valueSource\}/);
+  assert.match(webviewSource, /source float/);
+  assert.match(webviewSource, /displayRed \/ 255/);
+  assert.match(webviewSource, /const channelColors = \['#ff5f63', '#54d17a', '#55a7ff', '#f1f1f1'\]/);
+  assert.match(webviewSource, /const labels = values\.map/);
+  assert.match(webviewSource, /sourcePixelData\?\.channels === 4/);
+  assert.match(webviewSource, /toPrecision\(9\)/);
+  assert.doesNotMatch(webviewSource, /`R\$\{red\}`/);
   assert.match(webviewStyles, /image-rendering: pixelated/);
   assert.match(webviewStyles, /\.pixel-grid/);
   assert.match(webviewStyles, /\.pixel-labels/);

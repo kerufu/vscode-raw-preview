@@ -41,12 +41,15 @@
   const pixelMarker = document.getElementById('pixelMarker');
   const pixelOverlayLegend = document.getElementById('pixelOverlayLegend');
   const pixelStatus = document.getElementById('pixelStatus');
+  const pixelValueSpace = document.getElementById('pixelValueSpace');
   const pixelSwatch = document.getElementById('pixelSwatch');
   const pixelCoordinates = document.getElementById('pixelCoordinates');
   const pixelHex = document.getElementById('pixelHex');
   const pixelRed = document.getElementById('pixelRed');
   const pixelGreen = document.getElementById('pixelGreen');
   const pixelBlue = document.getElementById('pixelBlue');
+  const pixelAlphaChannel = document.getElementById('pixelAlphaChannel');
+  const pixelAlpha = document.getElementById('pixelAlpha');
   const pixelLuma = document.getElementById('pixelLuma');
 
   const HISTOGRAM_SAMPLE_SIZE = 256;
@@ -102,6 +105,8 @@
   let inspectedPixel;
   let pixelFrameRequest;
   let pixelLabelsFrameRequest;
+  let sourcePixelData;
+  let pixelDataGeneration = 0;
   let uniforms;
 
   const vertexShaderSource = `
@@ -204,6 +209,7 @@
     imageHeight = 0;
     clearSelection();
     setSelectionMode(false);
+    resetSourcePixelData();
     resetPixelInspector();
     enableAdjustments(false);
     selectRegion.disabled = true;
@@ -674,8 +680,12 @@
     }
     pixelLabels.hidden = false;
     pixelOverlayLegend.hidden = false;
+    const valueSource = sourcePixelData ? 'source float' : 'normalized display float';
+    const hasAlpha = sourcePixelData?.channels === 4;
     pixelOverlayLegend.textContent =
-      scale >= 32 ? 'R / G / B · adjusted 0–255' : 'Y luma · adjusted 0–255';
+      scale >= 32
+        ? `${hasAlpha ? 'RGBA' : 'RGB'} · ${valueSource}`
+        : `${hasAlpha ? 'Y / A' : 'Y luma'} · ${valueSource}`;
     pixelLabelsContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     pixelLabelsContext.clearRect(0, 0, viewportWidth, viewportHeight);
 
@@ -683,13 +693,22 @@
       const sourceRow = sampleHeight - row - 1;
       for (let column = 0; column < sampleWidth; column += 1) {
         const index = (sourceRow * sampleWidth + column) * 4;
-        const red = samples[index];
-        const green = samples[index + 1];
-        const blue = samples[index + 2];
-        const luma = Math.round(0.2126 * red + 0.7152 * green + 0.0722 * blue);
+        const displayRed = samples[index];
+        const displayGreen = samples[index + 1];
+        const displayBlue = samples[index + 2];
+        const displayLuma =
+          0.2126 * displayRed + 0.7152 * displayGreen + 0.0722 * displayBlue;
+        const x = startX + column;
+        const y = startY + row;
+        const values = sourcePixelAt(x, y) || [
+          displayRed / 255,
+          displayGreen / 255,
+          displayBlue / 255,
+        ];
+        const luma = 0.2126 * values[0] + 0.7152 * values[1] + 0.0722 * values[2];
         const centerX = offsetX + (startX + column + 0.5) * scale;
         const centerY = offsetY + (startY + row + 0.5) * scale;
-        drawPixelValue(centerX, centerY, red, green, blue, luma);
+        drawPixelValue(centerX, centerY, values, luma, displayLuma);
       }
     }
   }
@@ -720,36 +739,77 @@
     sampleBufferHeight = nextHeight;
   }
 
-  function drawPixelValue(centerX, centerY, red, green, blue, luma) {
-    const darkText = luma >= 150;
+  function drawPixelValue(centerX, centerY, values, luma, displayLuma) {
+    const darkText = displayLuma >= 150;
     pixelLabelsContext.textAlign = 'center';
     pixelLabelsContext.textBaseline = 'middle';
-    pixelLabelsContext.fillStyle = darkText ? '#101010' : '#ffffff';
     pixelLabelsContext.strokeStyle = darkText
       ? 'rgba(255, 255, 255, 0.72)'
       : 'rgba(0, 0, 0, 0.82)';
 
     if (scale >= 32) {
-      const fontSize = Math.max(8, Math.min(12, Math.floor(scale / 5)));
-      const lineHeight = fontSize + 1;
+      const labels = values.map((value) => formatPixelFloat(value, true));
+      let fontSize = Math.max(6, Math.min(12, Math.floor(scale / 5)));
       pixelLabelsContext.font = `600 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+      while (
+        fontSize > 5 &&
+        Math.max(...labels.map((label) => pixelLabelsContext.measureText(label).width)) >
+          scale - 4
+      ) {
+        fontSize -= 1;
+        pixelLabelsContext.font = `600 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+      }
+      const lineHeight = fontSize + 1;
       pixelLabelsContext.lineWidth = Math.max(1.5, fontSize * 0.22);
-      const values = [`R${red}`, `G${green}`, `B${blue}`];
-      const firstLineY = centerY - lineHeight;
-      for (let line = 0; line < values.length; line += 1) {
+      const channelColors = ['#ff5f63', '#54d17a', '#55a7ff', '#f1f1f1'];
+      const firstLineY = centerY - ((labels.length - 1) * lineHeight) / 2;
+      for (let line = 0; line < labels.length; line += 1) {
         const y = firstLineY + line * lineHeight;
-        pixelLabelsContext.strokeText(values[line], centerX, y);
-        pixelLabelsContext.fillText(values[line], centerX, y);
+        pixelLabelsContext.fillStyle = channelColors[line];
+        pixelLabelsContext.strokeText(labels[line], centerX, y);
+        pixelLabelsContext.fillText(labels[line], centerX, y);
       }
       return;
     }
 
-    const fontSize = Math.max(7, Math.min(10, Math.floor(scale * 0.42)));
+    const compactValues = values.length === 4 ? [luma, values[3]] : [luma];
+    const labels = compactValues.map((value) => formatPixelFloat(value, true));
+    let fontSize = Math.max(5, Math.min(8, Math.floor(scale * 0.36)));
     pixelLabelsContext.font = `600 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+    while (
+      fontSize > 4 &&
+      Math.max(...labels.map((label) => pixelLabelsContext.measureText(label).width)) > scale - 3
+    ) {
+      fontSize -= 1;
+      pixelLabelsContext.font = `600 ${fontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+    }
     pixelLabelsContext.lineWidth = Math.max(1.5, fontSize * 0.22);
-    const value = String(luma);
-    pixelLabelsContext.strokeText(value, centerX, centerY);
-    pixelLabelsContext.fillText(value, centerX, centerY);
+    const lineHeight = fontSize + 1;
+    const firstLineY = centerY - ((labels.length - 1) * lineHeight) / 2;
+    for (let line = 0; line < labels.length; line += 1) {
+      const y = firstLineY + line * lineHeight;
+      pixelLabelsContext.fillStyle =
+        line === 0 ? (darkText ? '#101010' : '#ffffff') : '#f1f1f1';
+      pixelLabelsContext.strokeText(labels[line], centerX, y);
+      pixelLabelsContext.fillText(labels[line], centerX, y);
+    }
+  }
+
+  function formatPixelFloat(value, compact = false) {
+    if (Number.isNaN(value)) {
+      return 'NaN';
+    }
+    if (value === Infinity) {
+      return '+Inf';
+    }
+    if (value === -Infinity) {
+      return '−Inf';
+    }
+    if (compact) {
+      const significantDigits = scale >= 64 ? 9 : scale >= 32 ? 6 : 4;
+      return value.toPrecision(significantDigits).replace('e+', 'e');
+    }
+    return value.toPrecision(9).replace('e+', 'e');
   }
 
   function clearPixelLabels() {
@@ -758,6 +818,94 @@
     if (pixelLabelsContext) {
       pixelLabelsContext.clearRect(0, 0, pixelLabels.width, pixelLabels.height);
     }
+  }
+
+  async function loadSourcePixelData(sourceUri) {
+    const generation = ++pixelDataGeneration;
+    sourcePixelData = undefined;
+    pixelValueSpace.textContent = 'Display float';
+    if (!sourceUri) {
+      schedulePixelLabels();
+      return;
+    }
+    try {
+      const response = await fetch(sourceUri);
+      if (!response.ok) {
+        throw new Error(`pixel data request failed with ${response.status}`);
+      }
+      const buffer = await response.arrayBuffer();
+      if (generation !== pixelDataGeneration) {
+        return;
+      }
+      const header = new DataView(buffer, 0, Math.min(16, buffer.byteLength));
+      if (
+        buffer.byteLength < 16 ||
+        header.getUint8(0) !== 0x53 ||
+        header.getUint8(1) !== 0x52 ||
+        header.getUint8(2) !== 0x46 ||
+        (header.getUint8(3) !== 0x31 && header.getUint8(3) !== 0x32)
+      ) {
+        throw new Error('floating-point pixel data has an invalid header');
+      }
+      const width = header.getUint32(4, true);
+      const height = header.getUint32(8, true);
+      const channels = header.getUint32(12, true);
+      const valueCount = width * height * channels;
+      if (
+        !width ||
+        !height ||
+        ![3, 4].includes(channels) ||
+        buffer.byteLength < 16 + valueCount * 4
+      ) {
+        throw new Error('floating-point pixel data is incomplete');
+      }
+      sourcePixelData = {
+        width,
+        height,
+        channels,
+        values: new Float32Array(buffer, 16, valueCount),
+      };
+      pixelValueSpace.textContent = 'Source float';
+      pixelAlphaChannel.hidden = channels !== 4;
+      pixelStatus.textContent = `Original linear EXR ${channels === 4 ? 'RGBA' : 'RGB'} · zero-based coordinates.`;
+      schedulePixelLabels();
+      if (inspectedPixel) {
+        schedulePixelSample(inspectedPixel, true);
+      }
+    } catch (error) {
+      if (generation !== pixelDataGeneration) {
+        return;
+      }
+      sourcePixelData = undefined;
+      pixelValueSpace.textContent = 'Display float';
+      pixelAlphaChannel.hidden = true;
+      pixelStatus.textContent = 'Source floats unavailable; showing normalized display values.';
+      console.warn(error);
+      schedulePixelLabels();
+    }
+  }
+
+  function sourcePixelAt(x, y) {
+    if (
+      !sourcePixelData ||
+      x < 0 ||
+      y < 0 ||
+      x >= sourcePixelData.width ||
+      y >= sourcePixelData.height
+    ) {
+      return undefined;
+    }
+    const index = (y * sourcePixelData.width + x) * sourcePixelData.channels;
+    return Array.from(
+      sourcePixelData.values.subarray(index, index + sourcePixelData.channels),
+    );
+  }
+
+  function resetSourcePixelData() {
+    pixelDataGeneration += 1;
+    sourcePixelData = undefined;
+    pixelValueSpace.textContent = 'Display float';
+    pixelAlphaChannel.hidden = true;
   }
 
   function resetPixelInspector() {
@@ -770,12 +918,16 @@
       cancelAnimationFrame(pixelLabelsFrameRequest);
       pixelLabelsFrameRequest = undefined;
     }
-    pixelStatus.textContent = 'Hover to sample. Pixel zoom overlays values on every visible cell.';
+    pixelStatus.textContent = sourcePixelData
+      ? `Original linear EXR ${sourcePixelData.channels === 4 ? 'RGBA' : 'RGB'} · zero-based coordinates.`
+      : 'Hover to sample. Pixel zoom overlays normalized floating values.';
     pixelCoordinates.textContent = 'x —   y —';
     pixelHex.textContent = '#——';
     pixelRed.textContent = '—';
     pixelGreen.textContent = '—';
     pixelBlue.textContent = '—';
+    pixelAlpha.textContent = '—';
+    pixelAlphaChannel.hidden = sourcePixelData?.channels !== 4;
     pixelLuma.textContent = '—';
     pixelSwatch.style.removeProperty('background');
     pixelMarker.hidden = true;
@@ -801,7 +953,9 @@
       inspectedPixel && inspectedPixel.x === pixel.x && inspectedPixel.y === pixel.y;
     inspectedPixel = pixel;
     updatePixelOverlays();
-    pixelStatus.textContent = 'Adjusted preview value · zero-based coordinates.';
+    pixelStatus.textContent = sourcePixelData
+      ? `Original linear EXR ${sourcePixelData.channels === 4 ? 'RGBA' : 'RGB'} · zero-based coordinates.`
+      : 'Normalized adjusted display RGB · zero-based coordinates.';
     if (unchanged && !force && !pixelFrameRequest) {
       return;
     }
@@ -839,19 +993,26 @@
   }
 
   function updatePixelReadout(pixel, sample) {
-    const [red, green, blue] = sample;
-    const luma = Math.round(0.2126 * red + 0.7152 * green + 0.0722 * blue);
-    const hexadecimal = [red, green, blue]
+    const [displayRed, displayGreen, displayBlue] = sample;
+    const values = sourcePixelAt(pixel.x, pixel.y) || [
+      displayRed / 255,
+      displayGreen / 255,
+      displayBlue / 255,
+    ];
+    const luma = 0.2126 * values[0] + 0.7152 * values[1] + 0.0722 * values[2];
+    const hexadecimal = [displayRed, displayGreen, displayBlue]
       .map((value) => value.toString(16).padStart(2, '0'))
       .join('')
       .toUpperCase();
     pixelCoordinates.textContent = `x ${pixel.x}   y ${pixel.y}`;
     pixelHex.textContent = `#${hexadecimal}`;
-    pixelRed.textContent = String(red);
-    pixelGreen.textContent = String(green);
-    pixelBlue.textContent = String(blue);
-    pixelLuma.textContent = String(luma);
-    pixelSwatch.style.background = `rgb(${red} ${green} ${blue})`;
+    pixelRed.textContent = formatPixelFloat(values[0]);
+    pixelGreen.textContent = formatPixelFloat(values[1]);
+    pixelBlue.textContent = formatPixelFloat(values[2]);
+    pixelAlphaChannel.hidden = values.length !== 4;
+    pixelAlpha.textContent = values.length === 4 ? formatPixelFloat(values[3]) : '—';
+    pixelLuma.textContent = formatPixelFloat(luma);
+    pixelSwatch.style.background = `rgb(${displayRed} ${displayGreen} ${displayBlue})`;
   }
 
   function updatePixelOverlays() {
@@ -985,6 +1146,7 @@
     } else if (message.type === 'preview') {
       source.textContent = message.source;
       renderDetails(message.details);
+      void loadSourcePixelData(message.pixelDataSrc);
       imageSource.onload = () => {
         try {
           uploadImage();
@@ -1079,7 +1241,9 @@
     if (pixel) {
       schedulePixelSample(pixel);
     } else if (inspectedPixel) {
-      pixelStatus.textContent = 'Last sampled adjusted preview value.';
+      pixelStatus.textContent = sourcePixelData
+        ? 'Last sampled original linear EXR value.'
+        : 'Last sampled normalized display value.';
     }
   });
   function stopPointerAction(event) {
@@ -1102,7 +1266,9 @@
   viewport.addEventListener('pointercancel', stopPointerAction);
   viewport.addEventListener('pointerleave', () => {
     if (inspectedPixel) {
-      pixelStatus.textContent = 'Last sampled adjusted preview value.';
+      pixelStatus.textContent = sourcePixelData
+        ? 'Last sampled original linear EXR value.'
+        : 'Last sampled normalized display value.';
     }
   });
   viewport.addEventListener('dblclick', (event) => {

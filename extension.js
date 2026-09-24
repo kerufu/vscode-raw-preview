@@ -119,9 +119,15 @@ class RawPreviewProvider {
       const previewUri = record.panel.webview
         .asWebviewUri(vscode.Uri.file(result.outputPath))
         .with({ query: `v=${generation}-${Date.now()}` });
+      const pixelDataUri = result.pixelDataPath
+        ? record.panel.webview
+            .asWebviewUri(vscode.Uri.file(result.pixelDataPath))
+            .with({ query: `v=${generation}-${Date.now()}` })
+        : undefined;
       this.post(record, {
         type: 'preview',
         src: previewUri.toString(),
+        pixelDataSrc: pixelDataUri?.toString(),
         width: result.width,
         height: result.height,
         source: result.source,
@@ -158,19 +164,29 @@ class RawPreviewProvider {
     await vscode.workspace.fs.createDirectory(this.context.globalStorageUri);
     const fingerprint = crypto
       .createHash('sha1')
-      .update(`${uri.toString()}\0${stat.mtime}\0${stat.size}\0${mode}`)
+      .update(
+        `${uri.toString()}\0${stat.mtime}\0${stat.size}\0${mode}\0${isExr ? 'exr-float-v2' : ''}`,
+      )
       .digest('hex');
     const outputPath = vscode.Uri.joinPath(this.context.globalStorageUri, `${fingerprint}.jpg`).fsPath;
+    const floatOutputPath = vscode.Uri.joinPath(
+      this.context.globalStorageUri,
+      `${fingerprint}.rgb.f32`,
+    ).fsPath;
 
     let width;
     let height;
     let source;
+    let pixelDataPath;
 
     if (!force && (await isUsableFile(outputPath))) {
       const cachedPreview = extractBestJpeg(await fs.readFile(outputPath));
       width = cachedPreview?.width;
       height = cachedPreview?.height;
       source = mode === 'rendered' || isExr ? 'Rendered image (cached)' : 'Cached preview';
+      if (isExr && (await isUsableFile(floatOutputPath))) {
+        pixelDataPath = floatOutputPath;
+      }
     } else if (mode !== 'rendered' && !isExr) {
       const bytes = Buffer.from(await vscode.workspace.fs.readFile(uri));
       const preview = extractBestJpeg(bytes);
@@ -196,17 +212,19 @@ class RawPreviewProvider {
       const rendered = await renderRaw({
         inputPath,
         outputPath,
+        floatOutputPath: isExr ? floatOutputPath : undefined,
         extensionPath: this.context.extensionPath,
         config,
       });
       source = `Rendered with ${rendered.decoder}`;
+      pixelDataPath = rendered.pixelDataPath;
     }
 
     const inputPath = uri.scheme === 'file' ? uri.fsPath : undefined;
     const exif =
       inputPath && vscode.workspace.isTrusted ? await readExifMetadata(inputPath) : undefined;
     const details = buildDetails(uri, stat, width, height, source, exif);
-    return { outputPath, width, height, source, details };
+    return { outputPath, pixelDataPath, width, height, source, details };
   }
 
   async localInputPath(uri, fingerprint) {
@@ -238,7 +256,7 @@ class RawPreviewProvider {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; connect-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
   <link rel="stylesheet" href="${styleUri}">
   <title>${title}</title>
 </head>
@@ -404,7 +422,7 @@ class RawPreviewProvider {
             <h2 id="pixelInspectorTitle">Pixel inspector</h2>
             <p id="pixelStatus">Hover to sample. Pixel zoom overlays values on every visible cell.</p>
           </div>
-          <span class="scope-badge">Display 8-bit</span>
+          <span id="pixelValueSpace" class="scope-badge">Float RGB</span>
         </div>
         <div class="pixel-readout">
           <span id="pixelSwatch" class="pixel-swatch" aria-hidden="true"></span>
@@ -412,10 +430,11 @@ class RawPreviewProvider {
             <output id="pixelCoordinates" aria-label="Pixel coordinates">x — &nbsp; y —</output>
             <output id="pixelHex" class="pixel-hex" aria-label="Pixel hexadecimal value">#——</output>
           </div>
-          <div class="pixel-channels" aria-label="Displayed pixel channel values">
+          <div class="pixel-channels" aria-label="Pixel channel values">
             <span class="red-channel">R <output id="pixelRed">—</output></span>
             <span class="green-channel">G <output id="pixelGreen">—</output></span>
             <span class="blue-channel">B <output id="pixelBlue">—</output></span>
+            <span id="pixelAlphaChannel" class="alpha-channel" hidden>A <output id="pixelAlpha">—</output></span>
             <span class="luma-channel">Y <output id="pixelLuma">—</output></span>
           </div>
         </div>

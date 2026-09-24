@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 const { buildPythonExrDecoder, buildPythonRawpyDecoder } = require('../src/decoder');
@@ -93,4 +95,34 @@ test('runs the OpenEXR decoder in the configured Conda environment', () => {
     '/cache/output.jpg',
     '95',
   ]);
+});
+
+test('asks the OpenEXR decoder to preserve float32 RGB data', () => {
+  const decoder = buildPythonExrDecoder(
+    config({ pythonPath: '/env/bin/python', condaEnvironment: '' }),
+    '/extension/decode_exr.py',
+    '/photos/lighting.exr',
+    '/cache/output.jpg',
+    92,
+    '/cache/output.rgb.f32',
+  );
+
+  assert.deepEqual(decoder.args, [
+    '/extension/decode_exr.py',
+    '/photos/lighting.exr',
+    '/cache/output.jpg',
+    '92',
+    '/cache/output.rgb.f32',
+  ]);
+});
+
+test('OpenEXR float sidecar preserves optional alpha', () => {
+  const script = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'decode_exr.py'),
+    'utf8',
+  );
+
+  assert.match(script, /b"SRF2"/);
+  assert.match(script, /np\.concatenate\(\(rgb, alpha\), axis=2\)/);
+  assert.match(script, /channels not in \(3, 4\)/);
 });

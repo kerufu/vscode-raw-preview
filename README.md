@@ -47,8 +47,9 @@ Alternatively, set these values manually:
 - Double-click RAW or EXR files to open a dedicated preview editor
 - Fit, 100%, and pixel-level zoom up to 6400%, with mouse-drag panning
 - One-click 1600% Pixel view, crisp nearest-neighbor magnification, and a high-zoom value grid
-- Adjusted values drawn over every visible pixel: luma at 1600%, then RGB at 3200% and above
-- Hover pixel inspector with zero-based coordinates, displayed RGB, hex, and luma values
+- Floating values drawn over every visible pixel: luma at 1600%, then color-coded RGB at 3200% and above
+- Original linear float32 RGB or RGBA values for Python-decoded EXR files, including negative and above-one samples
+- Hover pixel inspector with zero-based coordinates, floating RGB/luma, display hex, and color swatch
 - Real-time exposure, gamma, offset, and tone-map controls powered by WebGL
 - None, Reinhard, ACES, and Filmic tone-map modes with one-click reset
 - Live RGB and luma histogram for the adjusted image
@@ -70,7 +71,9 @@ Adjustments are applied instantly to the displayed preview and never modify the 
 
 The controls run in a WebGL shader, so zooming and full-resolution adjustments remain responsive. Their values persist while the editor is open; **Reset** restores the neutral view. The histogram measures the adjusted, display-referred preview. Choose **Select region**, drag across the image, and use **Clear selection** to return to the whole-image histogram. While the selection tool is active, Alt-drag or middle-drag pans.
 
-Use **Pixel** to jump to 1600%, or keep pressing **+** to zoom as far as 6400%. Double-clicking the image toggles between 100% and pixel zoom. At 1600%, every visible cell shows its adjusted 8-bit luma value. At 3200% and above, each cell shows its adjusted R, G, and B values directly over the image. Labels use light or dark text automatically to remain legible. Hover over any image pixel for its zero-based `x`/`y` coordinates, hex value, and precise readout in the Pixel inspector.
+Use **Pixel** to jump to 1600%, or keep pressing **+** to zoom as far as 6400%. Double-clicking the image toggles between 100% and pixel zoom. At 1600%, every visible cell shows floating luma and, when present, alpha. At 3200% and above, each cell shows prefix-free floating channel values directly over the image: red, green, blue, then neutral-white alpha when available. Outlined labels remain legible over light and dark pixels. Precision increases with available cell space, reaching nine significant digits at 6400%; the sidebar always uses nine significant digits.
+
+When an EXR is decoded by the Python OpenEXR path, the decoder writes a float32 RGB or RGBA sidecar and the inspector uses the original linear samples without clipping or 8-bit quantization. Values below 0 and above 1 remain available. For camera RAW previews or native-decoder fallbacks, the inspector reports normalized floating display values instead.
 
 ## Settings
 
@@ -97,11 +100,11 @@ npm run package
 The package command creates a `.vsix` that can be installed with:
 
 ```sh
-code --install-extension spectral-raw-preview-0.5.1.vsix
+code --install-extension spectral-raw-preview-0.6.1.vsix
 ```
 
 ## Format notes
 
 RAW is a family of vendor-specific formats, not one codec. Embedded-preview availability and native decoder support vary by camera model. CR3 and newer camera formats may require a current decoder. If a file has no embedded JPEG and every configured decoder rejects it, the editor shows the individual decoder errors and leaves the original file untouched.
 
-OpenEXR is converted to an sRGB JPEG preview before display. Values outside the 0–1 linear range are clipped during that conversion, so the current viewer is intended for inspection rather than lossless HDR grading. The original EXR is never changed.
+OpenEXR is converted to an sRGB JPEG for visual display, so the rendered colors still clip values outside the 0–1 linear range. The Python decoder separately preserves the original linear RGB and optional alpha samples as float32 data for pixel inspection. The original EXR is never changed.

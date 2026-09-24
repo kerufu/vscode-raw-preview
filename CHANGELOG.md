@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.1
+
+- Preserves and displays the EXR alpha channel when present
+- Adds a fourth neutral-colored, prefix-free alpha row to the on-image overlay
+- Shows luma and alpha together in the compact 1600% overlay
+- Increased sidebar precision to nine significant float digits
+- Increased on-image precision adaptively at 3200% and 6400%
+
+## 0.6.0
+
+- Preserves original linear OpenEXR RGB samples in a float32 sidecar
+- Displays negative, above-one, NaN, and infinite EXR values without 8-bit quantization
+- Shows normalized floating display values when source floats are unavailable
+- Removed R/G/B prefixes from on-image values and colored each numeric row by channel
+- Expanded the sidebar readout for higher-precision floating-point values
+
 ## 0.5.1
 
 - Added adjusted pixel values directly over every visible pixel at high zoom
