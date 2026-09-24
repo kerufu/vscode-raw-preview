@@ -252,6 +252,7 @@ class RawPreviewProvider {
     <div class="tools" aria-label="Preview controls">
       <button id="fit" type="button" title="Fit image to view">Fit</button>
       <button id="actual" type="button" title="Show image at 100%">100%</button>
+      <button id="pixelZoom" type="button" title="Zoom to 1600% for pixel inspection">Pixel</button>
       <button id="zoomOut" type="button" aria-label="Zoom out">−</button>
       <output id="zoomValue">100%</output>
       <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
@@ -266,9 +267,11 @@ class RawPreviewProvider {
         <canvas id="display" role="img" aria-label="${title}"></canvas>
         <img id="imageSource" alt="" draggable="false" crossorigin="anonymous" hidden>
       </div>
+      <div id="pixelGrid" class="pixel-grid" aria-hidden="true" hidden></div>
       <div id="selectionBox" class="selection-box" hidden>
         <span id="selectionSize" class="selection-size"></span>
       </div>
+      <div id="pixelMarker" class="pixel-marker" aria-hidden="true" hidden></div>
       <div id="empty" class="empty">
         <div class="spinner" aria-hidden="true"></div>
         <h1 id="emptyTitle">Opening RAW image</h1>
@@ -393,13 +396,36 @@ class RawPreviewProvider {
         <p id="selectionHelp" class="selection-help">Select a region, then drag across the image. Alt-drag pans while selection is active.</p>
       </section>
 
+      <section class="pixel-panel" aria-labelledby="pixelInspectorTitle">
+        <div class="pixel-heading">
+          <div>
+            <h2 id="pixelInspectorTitle">Pixel inspector</h2>
+            <p id="pixelStatus">Hover over the image to sample a pixel.</p>
+          </div>
+          <span class="scope-badge">Display 8-bit</span>
+        </div>
+        <div class="pixel-readout">
+          <span id="pixelSwatch" class="pixel-swatch" aria-hidden="true"></span>
+          <div class="pixel-identity">
+            <output id="pixelCoordinates" aria-label="Pixel coordinates">x — &nbsp; y —</output>
+            <output id="pixelHex" class="pixel-hex" aria-label="Pixel hexadecimal value">#——</output>
+          </div>
+          <div class="pixel-channels" aria-label="Displayed pixel channel values">
+            <span class="red-channel">R <output id="pixelRed">—</output></span>
+            <span class="green-channel">G <output id="pixelGreen">—</output></span>
+            <span class="blue-channel">B <output id="pixelBlue">—</output></span>
+            <span class="luma-channel">Y <output id="pixelLuma">—</output></span>
+          </div>
+        </div>
+      </section>
+
       <section class="details" aria-label="File details">
         <div class="details-heading">
           <h2>File details</h2>
           <button id="reveal" class="text-button" type="button">Reveal</button>
         </div>
         <dl id="detailsList"></dl>
-        <p class="hint">Drag to pan. Scroll to zoom. Use Select region for histogram sampling.</p>
+        <p class="hint">Drag to pan. Scroll to zoom up to 6400%. Double-click to toggle pixel zoom. Use Select region for histogram sampling.</p>
       </section>
     </aside>
   </main>

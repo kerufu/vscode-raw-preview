@@ -13,6 +13,10 @@ const webviewSource = fs.readFileSync(
   path.join(__dirname, '..', 'media', 'main.js'),
   'utf8',
 );
+const webviewStyles = fs.readFileSync(
+  path.join(__dirname, '..', 'media', 'main.css'),
+  'utf8',
+);
 
 test('webview exposes every requested image adjustment', () => {
   for (const id of ['exposure', 'gamma', 'offset', 'tonemap', 'resetAdjustments']) {
@@ -53,6 +57,29 @@ test('histogram supports whole-image and cursor-selected scopes', () => {
   assert.match(webviewSource, /Whole image/);
   assert.match(webviewSource, /uniform vec2 u_uvMin/);
   assert.match(webviewSource, /uniform vec2 u_uvMax/);
+});
+
+test('pixel zoom and inspection expose exact displayed pixel values', () => {
+  for (const id of [
+    'pixelZoom',
+    'pixelGrid',
+    'pixelMarker',
+    'pixelCoordinates',
+    'pixelRed',
+    'pixelGreen',
+    'pixelBlue',
+    'pixelLuma',
+  ]) {
+    assert.match(extensionSource, new RegExp(`id=["']${id}["']`));
+    assert.match(webviewSource, new RegExp(`getElementById\\(["']${id}["']\\)`));
+  }
+  assert.match(webviewSource, /const MAX_SCALE = 64/);
+  assert.match(webviewSource, /const PIXEL_ZOOM_SCALE = 16/);
+  assert.match(webviewSource, /Math\.floor\(x\)/);
+  assert.match(webviewSource, /gl\.readPixels\(0, 0, 1, 1/);
+  assert.match(webviewSource, /Adjusted preview value/);
+  assert.match(webviewStyles, /image-rendering: pixelated/);
+  assert.match(webviewStyles, /\.pixel-grid/);
 });
 
 test('every scripted UI element exists in the webview markup', () => {

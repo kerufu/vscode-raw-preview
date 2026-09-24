@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Increased maximum zoom from 800% to 6400% with predictable pixel-scale steps
+- Added a one-click 1600% Pixel view and double-click pixel-zoom toggle
+- Added crisp nearest-neighbor rendering and a per-pixel grid at high zoom
+- Added a live pixel inspector with coordinates, adjusted RGB, hex, and luma values
+- Added a highlighted pixel marker that stays aligned while zooming and panning
+
 ## 0.4.0
 
 - Added automatic lowercase and uppercase OpenEXR file associations

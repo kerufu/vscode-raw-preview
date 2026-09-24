@@ -13,6 +13,7 @@
   const tryRender = document.getElementById('tryRender');
   const source = document.getElementById('source');
   const zoomValue = document.getElementById('zoomValue');
+  const pixelZoom = document.getElementById('pixelZoom');
   const detailsList = document.getElementById('detailsList');
   const exposureInput = document.getElementById('exposure');
   const exposureNumber = document.getElementById('exposureNumber');
@@ -34,8 +35,26 @@
   const histogramEmpty = document.getElementById('histogramEmpty');
   const histogramScope = document.getElementById('histogramScope');
   const histogramContext = histogramCanvas.getContext('2d');
+  const pixelGrid = document.getElementById('pixelGrid');
+  const pixelMarker = document.getElementById('pixelMarker');
+  const pixelStatus = document.getElementById('pixelStatus');
+  const pixelSwatch = document.getElementById('pixelSwatch');
+  const pixelCoordinates = document.getElementById('pixelCoordinates');
+  const pixelHex = document.getElementById('pixelHex');
+  const pixelRed = document.getElementById('pixelRed');
+  const pixelGreen = document.getElementById('pixelGreen');
+  const pixelBlue = document.getElementById('pixelBlue');
+  const pixelLuma = document.getElementById('pixelLuma');
 
   const HISTOGRAM_SAMPLE_SIZE = 256;
+  const MAX_SCALE = 64;
+  const PIXELATED_SCALE = 4;
+  const PIXEL_GRID_SCALE = 16;
+  const PIXEL_ZOOM_SCALE = 16;
+  const zoomStops = Object.freeze([
+    0.01, 0.02, 0.033, 0.05, 0.067, 0.1, 0.125, 0.167, 0.25, 0.333, 0.5, 0.667,
+    0.75, 1, 2, 4, 8, 16, 32, 64,
+  ]);
   const defaultAdjustments = Object.freeze({
     exposure: 0,
     gamma: 2.2,
@@ -75,6 +94,8 @@
   let histogramTexture;
   let histogramFramebuffer;
   let histogramFrameRequest;
+  let inspectedPixel;
+  let pixelFrameRequest;
   let uniforms;
 
   const vertexShaderSource = `
@@ -177,6 +198,7 @@
     imageHeight = 0;
     clearSelection();
     setSelectionMode(false);
+    resetPixelInspector();
     enableAdjustments(false);
     selectRegion.disabled = true;
     showHistogramEmpty('Open an image to view its histogram');
@@ -204,9 +226,16 @@
   }
 
   function applyTransform() {
+    const pixelated = scale >= PIXELATED_SCALE;
+    if (pixelated) {
+      offsetX = Math.round(offsetX);
+      offsetY = Math.round(offsetY);
+    }
     imagePlane.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    display.classList.toggle('pixelated', pixelated);
     zoomValue.textContent = `${Math.round(scale * 100)}%`;
     updateSelectionOverlay();
+    updatePixelOverlays();
   }
 
   function fitImage() {
@@ -245,7 +274,7 @@
     if (!imageWidth) {
       return;
     }
-    const clamped = Math.min(8, Math.max(0.02, nextScale));
+    const clamped = Math.min(MAX_SCALE, Math.max(0.01, nextScale));
     const bounds = viewport.getBoundingClientRect();
     const pointX = clientX === undefined ? bounds.left + bounds.width / 2 : clientX;
     const pointY = clientY === undefined ? bounds.top + bounds.height / 2 : clientY;
@@ -258,6 +287,23 @@
     offsetY = localY - imageY * scale;
     fitMode = false;
     applyTransform();
+  }
+
+  function zoomByStep(direction, clientX, clientY) {
+    const tolerance = 0.0001;
+    let nextScale;
+    if (direction > 0) {
+      nextScale = zoomStops.find((candidate) => candidate > scale + tolerance) || MAX_SCALE;
+    } else {
+      nextScale = [...zoomStops]
+        .reverse()
+        .find((candidate) => candidate < scale - tolerance) || zoomStops[0];
+    }
+    zoomTo(nextScale, clientX, clientY);
+  }
+
+  function zoomToPixels(clientX, clientY) {
+    zoomTo(PIXEL_ZOOM_SCALE, clientX, clientY);
   }
 
   function compileShader(type, sourceCode) {
@@ -378,6 +424,7 @@
     imageHeight = imageSource.naturalHeight;
     clearSelection();
     setSelectionMode(false);
+    resetPixelInspector();
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, imageTexture);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.BROWSER_DEFAULT_WEBGL);
@@ -413,6 +460,9 @@
     configureShader();
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     scheduleHistogram();
+    if (inspectedPixel) {
+      schedulePixelSample(inspectedPixel, true);
+    }
   }
 
   function scheduleHistogram() {
@@ -544,6 +594,118 @@
     histogramScope.textContent = 'Whole image';
   }
 
+  function resetPixelInspector() {
+    inspectedPixel = undefined;
+    if (pixelFrameRequest) {
+      cancelAnimationFrame(pixelFrameRequest);
+      pixelFrameRequest = undefined;
+    }
+    pixelStatus.textContent = 'Hover over the image to sample a pixel.';
+    pixelCoordinates.textContent = 'x —   y —';
+    pixelHex.textContent = '#——';
+    pixelRed.textContent = '—';
+    pixelGreen.textContent = '—';
+    pixelBlue.textContent = '—';
+    pixelLuma.textContent = '—';
+    pixelSwatch.style.removeProperty('background');
+    pixelMarker.hidden = true;
+    pixelGrid.hidden = true;
+  }
+
+  function imagePixelFromPointer(event) {
+    const bounds = viewport.getBoundingClientRect();
+    const x = (event.clientX - bounds.left - offsetX) / scale;
+    const y = (event.clientY - bounds.top - offsetY) / scale;
+    if (x < 0 || y < 0 || x >= imageWidth || y >= imageHeight) {
+      return undefined;
+    }
+    return { x: Math.floor(x), y: Math.floor(y) };
+  }
+
+  function schedulePixelSample(pixel, force = false) {
+    if (!pixel || !gl || !imageWidth) {
+      return;
+    }
+    const unchanged =
+      inspectedPixel && inspectedPixel.x === pixel.x && inspectedPixel.y === pixel.y;
+    inspectedPixel = pixel;
+    updatePixelOverlays();
+    pixelStatus.textContent = 'Adjusted preview value · zero-based coordinates.';
+    if (unchanged && !force && !pixelFrameRequest) {
+      return;
+    }
+    if (pixelFrameRequest) {
+      cancelAnimationFrame(pixelFrameRequest);
+    }
+    pixelFrameRequest = requestAnimationFrame(() => {
+      pixelFrameRequest = undefined;
+      sampleDisplayedPixel();
+    });
+  }
+
+  function sampleDisplayedPixel() {
+    if (!inspectedPixel || !gl || !imageWidth) {
+      return;
+    }
+    const pixel = { ...inspectedPixel };
+    const sample = new Uint8Array(4);
+    const uvMin = [pixel.x / imageWidth, pixel.y / imageHeight];
+    const uvMax = [(pixel.x + 1) / imageWidth, (pixel.y + 1) / imageHeight];
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, histogramFramebuffer);
+    gl.viewport(0, 0, 1, 1);
+    configureShader(uvMin, uvMax);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, sample);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, display.width, display.height);
+
+    if (!inspectedPixel || inspectedPixel.x !== pixel.x || inspectedPixel.y !== pixel.y) {
+      schedulePixelSample(inspectedPixel, true);
+      return;
+    }
+    updatePixelReadout(pixel, sample);
+  }
+
+  function updatePixelReadout(pixel, sample) {
+    const [red, green, blue] = sample;
+    const luma = Math.round(0.2126 * red + 0.7152 * green + 0.0722 * blue);
+    const hexadecimal = [red, green, blue]
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase();
+    pixelCoordinates.textContent = `x ${pixel.x}   y ${pixel.y}`;
+    pixelHex.textContent = `#${hexadecimal}`;
+    pixelRed.textContent = String(red);
+    pixelGreen.textContent = String(green);
+    pixelBlue.textContent = String(blue);
+    pixelLuma.textContent = String(luma);
+    pixelSwatch.style.background = `rgb(${red} ${green} ${blue})`;
+  }
+
+  function updatePixelOverlays() {
+    const showGrid = Boolean(imageWidth && scale >= PIXEL_GRID_SCALE);
+    pixelGrid.hidden = !showGrid;
+    if (showGrid) {
+      pixelGrid.style.setProperty('--pixel-size', `${scale}px`);
+      pixelGrid.style.left = `${offsetX}px`;
+      pixelGrid.style.top = `${offsetY}px`;
+      pixelGrid.style.width = `${imageWidth * scale}px`;
+      pixelGrid.style.height = `${imageHeight * scale}px`;
+    }
+
+    const showMarker = Boolean(
+      imageWidth && inspectedPixel && scale >= PIXELATED_SCALE,
+    );
+    pixelMarker.hidden = !showMarker;
+    if (showMarker) {
+      pixelMarker.style.left = `${offsetX + inspectedPixel.x * scale}px`;
+      pixelMarker.style.top = `${offsetY + inspectedPixel.y * scale}px`;
+      pixelMarker.style.width = `${scale}px`;
+      pixelMarker.style.height = `${scale}px`;
+    }
+  }
+
   function imagePointFromPointer(event) {
     const bounds = viewport.getBoundingClientRect();
     return {
@@ -673,8 +835,9 @@
 
   document.getElementById('fit').addEventListener('click', fitImage);
   document.getElementById('actual').addEventListener('click', actualSize);
-  document.getElementById('zoomIn').addEventListener('click', () => zoomTo(scale * 1.25));
-  document.getElementById('zoomOut').addEventListener('click', () => zoomTo(scale / 1.25));
+  pixelZoom.addEventListener('click', () => zoomToPixels());
+  document.getElementById('zoomIn').addEventListener('click', () => zoomByStep(1));
+  document.getElementById('zoomOut').addEventListener('click', () => zoomByStep(-1));
   document.getElementById('refresh').addEventListener('click', () => post('refresh'));
   document.getElementById('render').addEventListener('click', () => post('render'));
   tryRender.addEventListener('click', () => post('render'));
@@ -741,6 +904,12 @@
       offsetY = event.clientY - dragStart.y;
       applyTransform();
     }
+    const pixel = imagePixelFromPointer(event);
+    if (pixel) {
+      schedulePixelSample(pixel);
+    } else if (inspectedPixel) {
+      pixelStatus.textContent = 'Last sampled adjusted preview value.';
+    }
   });
   function stopPointerAction(event) {
     if (selecting) {
@@ -760,6 +929,17 @@
   }
   viewport.addEventListener('pointerup', stopPointerAction);
   viewport.addEventListener('pointercancel', stopPointerAction);
+  viewport.addEventListener('pointerleave', () => {
+    if (inspectedPixel) {
+      pixelStatus.textContent = 'Last sampled adjusted preview value.';
+    }
+  });
+  viewport.addEventListener('dblclick', (event) => {
+    if (!imageWidth || selectionMode) {
+      return;
+    }
+    zoomTo(scale >= 8 ? 1 : PIXEL_ZOOM_SCALE, event.clientX, event.clientY);
+  });
   window.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') {
       return;
@@ -775,10 +955,12 @@
       fitImage();
     } else {
       updateSelectionOverlay();
+      updatePixelOverlays();
     }
   });
 
   showHistogramEmpty('Open an image to view its histogram');
+  resetPixelInspector();
   updateAdjustmentControls();
   post('ready');
 })();
