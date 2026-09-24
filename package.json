@@ -1,0 +1,233 @@
+{
+  "name": "spectral-raw-preview",
+  "displayName": "Spectral RAW Preview",
+  "description": "Automatically open and inspect camera RAW and OpenEXR files directly in VS Code.",
+  "version": "0.4.0",
+  "publisher": "spectralcapture",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "raw",
+    "image",
+    "dng",
+    "cr3",
+    "exr",
+    "photography"
+  ],
+  "activationEvents": [
+    "onCustomEditor:spectralRawPreview.rawEditor",
+    "onCommand:spectralRawPreview.open",
+    "onCommand:spectralRawPreview.refresh",
+    "onCommand:spectralRawPreview.render",
+    "onCommand:spectralRawPreview.selectCondaEnvironment"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "spectralRawPreview.rawEditor",
+        "displayName": "RAW / EXR Image Preview",
+        "selector": [
+          { "filenamePattern": "*.3fr" },
+          { "filenamePattern": "*.ari" },
+          { "filenamePattern": "*.arw" },
+          { "filenamePattern": "*.bay" },
+          { "filenamePattern": "*.cap" },
+          { "filenamePattern": "*.cr2" },
+          { "filenamePattern": "*.cr3" },
+          { "filenamePattern": "*.crw" },
+          { "filenamePattern": "*.dcr" },
+          { "filenamePattern": "*.dcs" },
+          { "filenamePattern": "*.dng" },
+          { "filenamePattern": "*.drf" },
+          { "filenamePattern": "*.eip" },
+          { "filenamePattern": "*.erf" },
+          { "filenamePattern": "*.exr" },
+          { "filenamePattern": "*.fff" },
+          { "filenamePattern": "*.gpr" },
+          { "filenamePattern": "*.iiq" },
+          { "filenamePattern": "*.k25" },
+          { "filenamePattern": "*.kdc" },
+          { "filenamePattern": "*.mdc" },
+          { "filenamePattern": "*.mef" },
+          { "filenamePattern": "*.mos" },
+          { "filenamePattern": "*.mrw" },
+          { "filenamePattern": "*.nef" },
+          { "filenamePattern": "*.nrw" },
+          { "filenamePattern": "*.orf" },
+          { "filenamePattern": "*.pef" },
+          { "filenamePattern": "*.ptx" },
+          { "filenamePattern": "*.pxn" },
+          { "filenamePattern": "*.raf" },
+          { "filenamePattern": "*.raw" },
+          { "filenamePattern": "*.rw2" },
+          { "filenamePattern": "*.rwl" },
+          { "filenamePattern": "*.sr2" },
+          { "filenamePattern": "*.srf" },
+          { "filenamePattern": "*.srw" },
+          { "filenamePattern": "*.x3f" },
+          { "filenamePattern": "*.3FR" },
+          { "filenamePattern": "*.ARI" },
+          { "filenamePattern": "*.ARW" },
+          { "filenamePattern": "*.BAY" },
+          { "filenamePattern": "*.CAP" },
+          { "filenamePattern": "*.CR2" },
+          { "filenamePattern": "*.CR3" },
+          { "filenamePattern": "*.CRW" },
+          { "filenamePattern": "*.DCR" },
+          { "filenamePattern": "*.DCS" },
+          { "filenamePattern": "*.DNG" },
+          { "filenamePattern": "*.DRF" },
+          { "filenamePattern": "*.EIP" },
+          { "filenamePattern": "*.ERF" },
+          { "filenamePattern": "*.EXR" },
+          { "filenamePattern": "*.FFF" },
+          { "filenamePattern": "*.GPR" },
+          { "filenamePattern": "*.IIQ" },
+          { "filenamePattern": "*.K25" },
+          { "filenamePattern": "*.KDC" },
+          { "filenamePattern": "*.MDC" },
+          { "filenamePattern": "*.MEF" },
+          { "filenamePattern": "*.MOS" },
+          { "filenamePattern": "*.MRW" },
+          { "filenamePattern": "*.NEF" },
+          { "filenamePattern": "*.NRW" },
+          { "filenamePattern": "*.ORF" },
+          { "filenamePattern": "*.PEF" },
+          { "filenamePattern": "*.PTX" },
+          { "filenamePattern": "*.PXN" },
+          { "filenamePattern": "*.RAF" },
+          { "filenamePattern": "*.RAW" },
+          { "filenamePattern": "*.RW2" },
+          { "filenamePattern": "*.RWL" },
+          { "filenamePattern": "*.SR2" },
+          { "filenamePattern": "*.SRF" },
+          { "filenamePattern": "*.SRW" },
+          { "filenamePattern": "*.X3F" }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "spectralRawPreview.open",
+        "title": "RAW Preview: Open Image"
+      },
+      {
+        "command": "spectralRawPreview.refresh",
+        "title": "RAW Preview: Refresh"
+      },
+      {
+        "command": "spectralRawPreview.render",
+        "title": "RAW Preview: Render Full Quality"
+      },
+      {
+        "command": "spectralRawPreview.selectCondaEnvironment",
+        "title": "RAW Preview: Select Conda Environment"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "spectralRawPreview.open",
+          "when": "resourceExtname =~ /\\.(3fr|ari|arw|bay|cap|cr2|cr3|crw|dcr|dcs|dng|drf|eip|erf|exr|fff|gpr|iiq|k25|kdc|mdc|mef|mos|mrw|nef|nrw|orf|pef|ptx|pxn|raf|raw|rw2|rwl|sr2|srf|srw|x3f)$/i",
+          "group": "navigation@20"
+        }
+      ],
+      "customEditor/title": [
+        {
+          "command": "spectralRawPreview.refresh",
+          "when": "activeCustomEditor == spectralRawPreview.rawEditor",
+          "group": "navigation@10"
+        },
+        {
+          "command": "spectralRawPreview.render",
+          "when": "activeCustomEditor == spectralRawPreview.rawEditor",
+          "group": "navigation@20"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Spectral RAW Preview",
+      "properties": {
+        "spectralRawPreview.defaultMode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "embedded",
+            "rendered"
+          ],
+          "enumDescriptions": [
+            "Use the instant embedded preview, falling back to a RAW renderer when needed.",
+            "Only extract the JPEG preview embedded by the camera.",
+            "Develop the RAW data with the configured external decoder."
+          ],
+          "default": "auto",
+          "description": "How camera RAW files are opened. OpenEXR files are always decoded with the configured renderer."
+        },
+        "spectralRawPreview.decoder": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "darktable",
+            "rawtherapee",
+            "imagemagick",
+            "sips",
+            "pythonRawpy",
+            "pythonExr"
+          ],
+          "default": "auto",
+          "description": "Decoder used for full-quality rendering. Auto tries installed decoders in order."
+        },
+        "spectralRawPreview.decoderPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional absolute path to the selected native decoder executable. Ignored for Auto and Python decoders."
+        },
+        "spectralRawPreview.pythonPath": {
+          "type": "string",
+          "default": "python3",
+          "description": "Python executable used by the rawpy and OpenEXR decoders when Conda Environment is empty."
+        },
+        "spectralRawPreview.condaPath": {
+          "type": "string",
+          "default": "conda",
+          "description": "Conda executable name or absolute path. Use RAW Preview: Select Conda Environment to discover environments."
+        },
+        "spectralRawPreview.condaEnvironment": {
+          "type": "string",
+          "default": "",
+          "description": "Conda environment name or absolute prefix used by Python image decoders. Leave empty to use Python Path directly."
+        },
+        "spectralRawPreview.jpegQuality": {
+          "type": "number",
+          "minimum": 50,
+          "maximum": 100,
+          "default": 92,
+          "description": "JPEG quality requested for rendered RAW and OpenEXR previews."
+        },
+        "spectralRawPreview.maxFileSizeMB": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 4096,
+          "default": 512,
+          "description": "Maximum RAW or OpenEXR file size that the extension will read."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check": "node --check extension.js && node --check src/raw-preview.js && node --check src/decoder.js && node --check media/main.js",
+    "test": "node --test test/*.test.js",
+    "package": "npx @vscode/vsce package"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.0"
+  }
+}
