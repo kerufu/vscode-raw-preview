@@ -54,12 +54,12 @@ async function renderRaw({ inputPath, outputPath, floatOutputPath, extensionPath
       command: 'magick',
       args: [inputPath, '-auto-orient', '-quality', String(quality), partialPath],
     },
-    sips: {
-      label: 'macOS sips',
-      command: 'sips',
-      args: ['-s', 'format', 'jpeg', '-s', 'formatOptions', String(quality), inputPath, '--out', partialPath],
-      platforms: ['darwin'],
-    },
+    // sips: {
+    //   label: 'macOS sips',
+    //   command: 'sips',
+    //   args: ['-s', 'format', 'jpeg', '-s', 'formatOptions', String(quality), inputPath, '--out', partialPath],
+    //   platforms: ['darwin'],
+    // },
     pythonRawpy: {
       ...pythonRawpy,
     },
@@ -72,7 +72,7 @@ async function renderRaw({ inputPath, outputPath, floatOutputPath, extensionPath
   if (selected === 'auto') {
     names = isExr
       ? ['pythonExr', 'imagemagick']
-      : ['darktable', 'rawtherapee', 'imagemagick', 'sips', 'pythonRawpy'];
+      : ['darktable', 'rawtherapee', 'imagemagick', 'pythonRawpy'];
   } else if (selected === 'pythonRawpy' && isExr) {
     names = ['pythonExr'];
   } else if (selected === 'pythonExr' && !isExr) {

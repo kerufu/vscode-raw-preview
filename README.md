@@ -23,7 +23,7 @@ Full-quality rendering automatically tries:
 OpenEXR files are decoded automatically with Python OpenCV (or `imageio` as a fallback), followed by ImageMagick when available. Install the Python dependencies into the configured environment:
 
 ```sh
-python3 -m pip install rawpy Pillow numpy opencv-python imageio
+python3 -m pip install rawpy Pillow numpy opencv-python imageio colour-demosaicing
 ```
 
 ### Conda environments
